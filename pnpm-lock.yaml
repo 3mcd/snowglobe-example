@@ -4,7 +4,7 @@ specifiers:
   '@javelin/hrtime-loop': ^1.0.0-alpha.4
   '@types/three': ^0.133.1
   '@types/ws': ^8.2.0
-  harmony-ecs: ^0.0.7
+  harmony-ecs: ^0.0.8
   npm-run-all: ^4.1.5
   rapier3d-node: ^0.7.7
   three: ^0.133.1
@@ -17,7 +17,7 @@ dependencies:
   '@javelin/hrtime-loop': 1.0.0-alpha.4
   '@types/three': 0.133.1
   '@types/ws': 8.2.0
-  harmony-ecs: 0.0.7
+  harmony-ecs: 0.0.8
   rapier3d-node: 0.7.7
   three: 0.133.1
   ws: 8.2.3
@@ -386,8 +386,8 @@ packages:
     resolution: {integrity: sha512-qkIilPUYcNhJpd33n0GBXTB1MMPp14TxEsEs0pTrsSVucApsYzW5V+Q8Qxhik6KU3evy+qkAAowTByymK0avdg==}
     dev: true
 
-  /harmony-ecs/0.0.7:
-    resolution: {integrity: sha512-svMdu+2dAz16YIhjGag1Z7bWd3tNc7YmM3yECnU9JMRJlmwdzA8t34tfzoRtatMKk9RvRxC11StpYWQ/4tU5Sw==}
+  /harmony-ecs/0.0.8:
+    resolution: {integrity: sha512-ZBmUctizKm7k4RdAkyiFZ1xlQ92rsyTtUx0C0JVmo6ZaLq1kjmr9zAKtqQ1uwOuNuJcMSr9numxQTREpDQU7LQ==}
     dev: false
 
   /has-bigints/1.0.1:

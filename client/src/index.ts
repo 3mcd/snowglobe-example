@@ -1,10 +1,14 @@
 import * as Three from "three"
-import * as ECS from "harmony-ecs"
+import { World, Schema, Entity } from "harmony-ecs"
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls"
+import CapsuleBufferGeometry from "./3d/CapsuleBufferGeometry"
 
 const ws = new WebSocket("ws://localhost:8000")
 const MAX_ENTITIES = 2_000
 
+let frameId = 0
+const frames: [ArrayBuffer, ArrayBuffer][] = []
+const messages: ArrayBuffer[] = []
 const canvas = document.getElementById("game") as HTMLCanvasElement
 const renderer = new Three.WebGLRenderer({ antialias: true, canvas })
 const camera = new Three.PerspectiveCamera(45, 1, 0.1, 2000000)
@@ -22,36 +26,28 @@ function scale() {
 window.addEventListener("resize", scale, false)
 scale()
 
-const world = ECS.makeWorld(MAX_ENTITIES)
-const Mesh = ECS.makeSchema(world, {})
+const world = World.make(MAX_ENTITIES)
+const Mesh = Schema.make(world, {})
 const Player = [Mesh] as const
 
-function makePlayer(world: ECS.World, scene: Three.Scene) {
-  const geometry = new Three.BoxGeometry(0.5, 0.5, 0.5)
+function makePlayer(world: World.World, scene: Three.Scene) {
+  const geometry = new CapsuleBufferGeometry(1, 1, 2, 10, 10, 10, 10)
   const material = new Three.MeshLambertMaterial({ color: 0xff0000 })
   const mesh = new Three.Mesh(geometry, material)
   scene.add(mesh)
-  return ECS.makeEntity(world, Player, [mesh])
+  return Entity.make(world, Player, [mesh])
 }
 
 const player = makePlayer(world, scene)
 const archetype = world.entityIndex[player]
-const meshes = archetype.table.find(col => col.schema.id === Mesh)
+const meshes = archetype.store.find(col => col.schema.id === Mesh)
 const keys = ["x", "y", "z"]
 
 makePlayer(world, scene)
 
 ws.binaryType = "arraybuffer"
 ws.addEventListener("message", message => {
-  const frame = new Float64Array(message.data)
-  const count = frame[0]
-  let k = 1
-  for (let i = 0; i < keys.length; i++) {
-    const key = keys[i]
-    for (let j = 0; j < count; j++) {
-      meshes.data[j].position[key] = frame[k++]
-    }
-  }
+  messages.push(message.data)
 })
 
 scene.add(camera)
@@ -70,3 +66,31 @@ function step() {
 }
 
 requestAnimationFrame(step)
+
+setInterval(() => {
+  for (let i = 0; i < messages.length; i++) {
+    let cursor = 0
+    const message = new Float64Array(messages[i])
+    const frameId = message[cursor++]
+    const count = message[cursor++]
+    // rollback
+    let frame: [ArrayBuffer, ArrayBuffer] = frames[0]
+
+    while (frame[0][0] <= frameId) {
+      frames.unshift()
+    }
+
+    for (let i = 0; i < keys.length; i++) {
+      const key = keys[i]
+      for (let j = 0; j < count; j++) {
+        meshes.data[j].position[key] = message[cursor++]
+      }
+    }
+  }
+}, (1 / 60) * 1000)
+
+document.addEventListener("keydown", e => {
+  if (e.code === "Space") {
+    ws.send(new ArrayBuffer(0))
+  }
+})

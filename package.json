@@ -16,7 +16,7 @@
     "@javelin/hrtime-loop": "^1.0.0-alpha.4",
     "@types/three": "^0.133.1",
     "@types/ws": "^8.2.0",
-    "harmony-ecs": "^0.0.7",
+    "harmony-ecs": "^0.0.8",
     "rapier3d-node": "^0.7.7",
     "three": "^0.133.1",
     "ws": "^8.2.3"
