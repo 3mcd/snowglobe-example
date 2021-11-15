@@ -1,104 +1,104 @@
 import * as Loop from "@javelin/hrtime-loop"
-import { Entity, formats, Query, Schema, World } from "harmony-ecs"
-import Rapier from "rapier3d-node"
+import * as Snowglobe from "snowglobe"
 import { WebSocket, WebSocketServer } from "ws"
-
-const GRAVITY = Object.freeze({ x: 0, y: -9.81, z: 0 })
-const MAX_ENTITIES = 2_000
+import * as World from "../shared/world"
+import * as Harmony from "harmony-ecs"
 
 const wss = new WebSocketServer({ port: 8000 })
-const simulation = new Rapier.World(GRAVITY)
-const world = World.make(MAX_ENTITIES)
-
-const Vector3 = {
-  x: formats.float64,
-  y: formats.float64,
-  z: formats.float64,
+const config = Snowglobe.makeConfig()
+const server = new Snowglobe.Server(World.make(), config, 0)
+const connections = new Map<number, Snowglobe.Connection<World.Command, World.Snapshot>>()
+const net: Snowglobe.NetworkResource<World.Command, World.Snapshot> = {
+  connections() {
+    return connections.entries()
+  },
+  sendMessage(handle, messageType, message) {
+    const connection = connections.get(handle)
+    connection.send(messageType, message)
+    connection.flush(messageType)
+  },
+  broadcastMessage(messageType, message) {
+    connections.forEach(connection => {
+      connection.send(messageType, message)
+      connection.flush(messageType)
+    })
+  },
 }
-const Position = Schema.makeBinary(world, Vector3)
-const Velocity = Schema.makeBinary(world, Vector3)
-const Body = Schema.make(world, {})
-const Player = [Position, Velocity, Body] as const
 
-const players = Query.make(world, Player)
+function initChannels(
+  channels: Harmony.SparseMap.SparseMap<ArrayBuffer[], Snowglobe.NetworkMessageType>,
+) {
+  Harmony.SparseMap.set(channels, Snowglobe.NetworkMessageType.ClockSyncMessage, [])
+  Harmony.SparseMap.set(channels, Snowglobe.NetworkMessageType.CommandMessage, [])
+  Harmony.SparseMap.set(channels, Snowglobe.NetworkMessageType.SnapshotMessage, [])
+}
 
-function physics() {
-  simulation.step()
-  for (let i = 0; i < players.length; i++) {
-    const [e, [p, v, b]] = players[i]
-    for (let j = 0; j < e.length; j++) {
-      const body = b[j] as Rapier.RigidBody
-      const { x, y, z } = body.translation()
-      const { x: vx, y: vy, z: vz } = body.linvel()
-      p.x[j] = x
-      p.y[j] = y
-      p.z[j] = z
-      v.x[j] = vx
-      v.y[j] = vy
-      v.z[j] = vz
+function serialize(messageType: Snowglobe.NetworkMessageType, message: any) {
+  switch (messageType) {
+    case Snowglobe.NetworkMessageType.ClockSyncMessage: {
+      const { clientId, clientSecondsSinceStartup, serverSecondsSinceStartup } = message
+      const data = new ArrayBuffer(25)
+      const view = new DataView(data)
+      view.setUint8(0, messageType)
+      view.setFloat64(1, clientId)
+      view.setFloat64(9, clientSecondsSinceStartup)
+      view.setFloat64(17, serverSecondsSinceStartup)
+      return data
     }
+    case Snowglobe.NetworkMessageType.CommandMessage: {
+      const [entity, jump] = message
+      const data = new ArrayBuffer(10)
+      const view = new DataView(data)
+      view.setUint8(0, messageType)
+      view.setFloat64(1, entity)
+      view.setUint8(9, jump)
+      return data
+    }
+    case Snowglobe.NetworkMessageType.SnapshotMessage:
+      return new Float64Array([
+        messageType,
+        message.clientId,
+        message.clientSecondsSinceStartup,
+        message.serverSecondsSinceStartup,
+      ])
   }
 }
 
-function makePlayer(world: World.World, simulation: Rapier.World, x = 0, y = 0, z = 0) {
-  const body = simulation.createRigidBody(
-    new Rapier.RigidBodyDesc(Rapier.RigidBodyType.Dynamic).setTranslation(x, y, z),
-  )
-  simulation.createCollider(Rapier.ColliderDesc.capsule(1, 1), body.handle)
-  return Entity.make(world, Player, [{ x, y, z }, { x: 0, y: 0, z: 0 }, body])
-}
-
-function makeGround(world: World.World, simulation: Rapier.World) {
-  const body = simulation.createRigidBody(
-    new Rapier.RigidBodyDesc(Rapier.RigidBodyType.Static).setTranslation(0, 0, 0),
-  )
-  simulation.createCollider(Rapier.ColliderDesc.cuboid(100, 0.5, 100), body.handle)
-}
-
-const player = makePlayer(world, simulation, 5, 20, 5)
-makePlayer(world, simulation, 0, 25, 0)
-makeGround(world, simulation)
-
-function serialize() {
-  const archetype = world.entityIndex[player]
-  const positions = archetype.store.find(col => col.schema.id === Position)
-  const { schema, data } = positions
-  const count = archetype.entities.length
-  const keys = Object.keys(schema.shape)
-  const array = new Float64Array(count * keys.length + 1)
-  let k = 0
-  array[k++] = count
-  for (let i = 0; i < keys.length; i++) {
-    const col = data[keys[i]]
-    for (let j = 0; j < count; j++) {
-      array[k++] = col[j]
-    }
+function makeConnection(
+  ws: WebSocket,
+): Snowglobe.Connection<World.Command, World.Snapshot> {
+  const incoming = Harmony.SparseMap.make<ArrayBuffer[], Snowglobe.NetworkMessageType>()
+  const outgoing = Harmony.SparseMap.make<ArrayBuffer[], Snowglobe.NetworkMessageType>()
+  initChannels(incoming)
+  initChannels(outgoing)
+  ws.on("message", (data: ArrayBuffer) => {
+    const view = new DataView(data)
+    const type = view.getUint8(0)
+  })
+  return {
+    recvClockSync() {},
+    recvCommand() {},
+    recvSnapshot() {},
+    send(messageType, message) {
+      Harmony.SparseMap.get(outgoing, messageType).push(serialize(messageType, message))
+    },
+    flush(messageType) {
+      Harmony.SparseMap.get(outgoing, messageType).forEach(message => {
+        ws.send(message)
+      })
+    },
   }
-  return array
 }
 
 let send = true
 
 const sockets: WebSocket[] = []
-const loop = Loop.createHrtimeLoop(() => {
-  physics()
-  if ((send = !send)) {
-    const packet = serialize()
-    for (let i = 0; i < sockets.length; i++) {
-      sockets[i].send(packet)
-    }
-  }
+const loop = Loop.createHrtimeLoop(clock => {
+  connections.forEach(connection => {})
+  server.update(clock.dt / 1000, Number(clock.now) / 1000, net)
 }, (1 / 60) * 1000)
 
-function onSocketMessage(socket: WebSocket, data: ArrayBuffer) {
-  for (let i = 0; i < players.length; i++) {
-    const [e, [, , b]] = players[i]
-    for (let j = 0; j < e.length; j++) {
-      const body = b[j] as Rapier.RigidBody
-      body.applyImpulse(new Rapier.Vector3(0, 20, 0), true)
-    }
-  }
-}
+function onSocketMessage(socket: WebSocket, data: ArrayBuffer) {}
 
 wss.on("connection", ws => {
   const index = sockets.push(ws) - 1
