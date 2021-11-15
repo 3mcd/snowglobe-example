@@ -14,8 +14,7 @@ await init()
 const connections = new Map<number, Net.Connection>()
 const socket = new WebSocket(`ws://${window.location.hostname}:8000`)
 const net = Net.make(connections)
-const config = Snowglobe.makeConfig()
-const client = new Snowglobe.Client(World.make, config, World.interpolate)
+const client = new Snowglobe.Client(World.make, World.config, World.interpolate)
 
 socket.binaryType = "arraybuffer"
 socket.addEventListener("open", () => connections.set(0, Net.makeConnection(socket, 0)))
@@ -56,7 +55,6 @@ function attachMesh(
 }
 
 attachMesh(2, world, scene)
-attachMesh(3, world, scene)
 
 scene.add(camera)
 camera.position.x = 20
@@ -87,36 +85,21 @@ function step(now: number) {
     startSeconds = nowSeconds
   }
   client.update(nowSeconds - (prevSeconds ?? nowSeconds), nowSeconds - startSeconds, net)
-  const displayState = client.stage().ready?.displayState().displayState()
+  const displayState = client.stage().ready?.displayState().displayState().clone()
   if (displayState) {
     render(displayState)
   }
   prevSeconds = nowSeconds
   // requestAnimationFrame(step)
 }
-setInterval(() => {
-  step(performance.now())
-})
+
+setInterval(() => step(performance.now()), (1 / 60) * 1000)
+
 // requestAnimationFrame(step)
 
 document.addEventListener("keydown", e => {
-  if (e.code === "Space") {
-    const command = Object.assign([2, 1], {
-      clone() {
-        return command
-      },
-    })
-    client.stage().ready?.issueCommand(command as World.Command, net)
-  }
-})
-
-document.addEventListener("keyup", e => {
-  if (e.code === "Space") {
-    const command = Object.assign([2, 0], {
-      clone() {
-        return command
-      },
-    })
-    client.stage().ready?.issueCommand(command as World.Command, net)
+  if (!e.repeat && e.code === "Space") {
+    const command = { entity: 2, jump: 1, clone: Net.clone }
+    client.stage().ready?.issueCommand(command, net)
   }
 })

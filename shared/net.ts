@@ -3,6 +3,15 @@ import * as Snowglobe from "snowglobe"
 import WebSocket from "ws"
 import * as World from "../shared/world"
 
+export function clone<$Object extends object>(this: $Object) {
+  const timestamp = Snowglobe.getTimestamp(this as any)
+  const cloned = Object.assign(JSON.parse(JSON.stringify(this)), { clone })
+  if (timestamp !== undefined) {
+    Snowglobe.setTimestamp(cloned, timestamp)
+  }
+  return cloned
+}
+
 export type Connection = Snowglobe.Connection<World.Command, World.Snapshot> & {
   open: boolean
 }
@@ -29,32 +38,32 @@ function encode(messageType: Snowglobe.NetworkMessageType, message: any) {
       return data
     }
     case Snowglobe.NetworkMessageType.CommandMessage: {
-      const [entity, jump] = message
-      const data = new ArrayBuffer(6)
+      const { entity, jump } = message
+      const data = new ArrayBuffer(8)
       const view = new DataView(data)
       view.setUint8(0, messageType)
-      view.setUint32(1, entity)
-      view.setUint8(5, jump)
+      view.setInt16(1, Snowglobe.getTimestamp(message))
+      view.setUint32(3, entity)
+      view.setUint8(7, jump)
       return data
     }
     case Snowglobe.NetworkMessageType.SnapshotMessage: {
-      const data = new ArrayBuffer(1 + message.size * 29)
+      const data = new ArrayBuffer(1 + 2 + 8 * 3 + 1)
       const view = new DataView(data)
       let offset = 0
       view.setUint8(offset, messageType)
       offset += 1
-      Harmony.SparseMap.forEach(message, ([{ x, y, z }, jump], entity) => {
-        view.setUint32(offset, entity)
-        offset += 4
-        view.setFloat64(offset, x)
-        offset += 8
-        view.setFloat64(offset, y)
-        offset += 8
-        view.setFloat64(offset, z)
-        offset += 8
-        view.setUint8(offset, jump)
-        offset += 1
-      })
+      view.setInt16(offset, Snowglobe.getTimestamp(message))
+      offset += 2
+      const { x, y, z } = message.translation
+      view.setFloat64(offset, x)
+      offset += 8
+      view.setFloat64(offset, y)
+      offset += 8
+      view.setFloat64(offset, z)
+      offset += 8
+      view.setUint8(offset, message.jump)
+      offset += 1
       return data
     }
   }
@@ -83,37 +92,29 @@ function decode(
       }
       break
     }
-    case Snowglobe.NetworkMessageType.CommandMessage:
-      message = Object.assign([view.getUint32(offset), view.getUint8(offset + 4)], {
-        clone() {
-          return message
-        },
-      })
+    case Snowglobe.NetworkMessageType.CommandMessage: {
+      const timestamp = view.getInt16(offset)
+      message = Snowglobe.setTimestamp(
+        { entity: view.getUint32(offset + 2), jump: view.getUint8(offset + 6), clone },
+        timestamp as any,
+      )
       break
-    case Snowglobe.NetworkMessageType.SnapshotMessage:
-      message = {
-        ...Harmony.SparseMap.make(),
-        clone: () => ({
-          ...message,
-          values: message.values.map(([translation, jump]) => [{ ...translation }, jump]),
-        }),
-      } as World.Snapshot
-      while (offset < end) {
-        const entity = view.getUint32(offset)
-        offset += 4
-        const x = view.getFloat64(offset)
-        offset += 8
-        const y = view.getFloat64(offset)
-        offset += 8
-        const z = view.getFloat64(offset)
-        offset += 8
-        const jump = view.getUint8(offset)
-        offset += 1
-        Harmony.SparseMap.set(message, entity, [{ x, y, z }, jump])
-      }
+    }
+    case Snowglobe.NetworkMessageType.SnapshotMessage: {
+      const timestamp = view.getInt16(offset)
+      offset += 2
+      const x = view.getFloat64(offset)
+      offset += 8
+      const y = view.getFloat64(offset)
+      offset += 8
+      const z = view.getFloat64(offset)
+      offset += 8
+      const jump = view.getUint8(offset)
+      offset += 1
+      message = { translation: { x, y, z }, jump, clone }
       break
+    }
   }
-
   return message
 }
 
@@ -140,10 +141,11 @@ export function makeConnection(socket: WebSocket, connectionHandle: number): Con
       ).pop()
     },
     recvCommand() {
-      return Harmony.SparseMap.get(
+      const command = Harmony.SparseMap.get(
         incoming,
         Snowglobe.NetworkMessageType.CommandMessage,
       ).pop()
+      return command
     },
     recvSnapshot() {
       return Harmony.SparseMap.get(
@@ -166,10 +168,7 @@ export function makeConnection(socket: WebSocket, connectionHandle: number): Con
       const buffer = Harmony.SparseMap.get(outgoing, messageType)
       let message: ArrayBuffer
       while ((message = buffer.pop())) {
-        let m = message
-        setTimeout(() => {
-          socket.send(m)
-        }, 200)
+        socket.send(message)
       }
     },
     get open() {
