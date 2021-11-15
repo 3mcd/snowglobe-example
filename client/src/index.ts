@@ -61,18 +61,15 @@ camera.position.x = 20
 camera.position.y = 20
 camera.position.z = 20
 
-function render(displayState: World.DisplayState) {
-  controls.update()
-  renderer.render(scene, camera)
-
+function render({ x, y, z }: World.DisplayState) {
   for (const [entities, [mesh]] of players) {
     for (let i = 0; i < entities.length; i++) {
-      const update = Harmony.SparseMap.get(displayState, entities[i])
-      if (update) {
-        Object.assign((mesh[i] as Three.Mesh).position, update)
-      }
+      ;(mesh[i] as Three.Mesh).position.set(x, y, z)
+      break
     }
   }
+  controls.update()
+  renderer.render(scene, camera)
 }
 
 let startSeconds = 0
@@ -80,7 +77,6 @@ let prevSeconds: number
 
 function step(now: number) {
   const nowSeconds = now / 1000
-  // render()
   if (startSeconds === undefined) {
     startSeconds = nowSeconds
   }
@@ -90,12 +86,12 @@ function step(now: number) {
     render(displayState)
   }
   prevSeconds = nowSeconds
-  // requestAnimationFrame(step)
+  requestAnimationFrame(step)
 }
 
-setInterval(() => step(performance.now()), (1 / 60) * 1000)
+// setInterval(() => step(performance.now()), (1 / 60) * 1000)
 
-// requestAnimationFrame(step)
+requestAnimationFrame(step)
 
 document.addEventListener("keydown", e => {
   if (!e.repeat && e.code === "Space") {

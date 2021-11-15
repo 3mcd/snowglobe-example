@@ -8,8 +8,7 @@ export type World = Snowglobe.World<Command, Snapshot, DisplayState> & {
 }
 export type Command = Snowglobe.Command & { entity: number; jump: number }
 export type Snapshot = Snowglobe.Snapshot & { translation: Rapier.Vector3; jump: number }
-export type DisplayState = Snowglobe.DisplayState &
-  Harmony.SparseMap.SparseMap<Rapier.Vector3, Harmony.Entity.Id>
+export type DisplayState = Snowglobe.DisplayState & Rapier.Vector3
 
 const ENTITY_COUNT = 1_000
 const TIMESTEP = 1 / 60
@@ -32,16 +31,7 @@ function lerp(a: Rapier.Vector3, b: Rapier.Vector3, t: number) {
 }
 
 export function interpolate(left: DisplayState, right: DisplayState, t: number) {
-  return right
-  // const displayState = {
-  //   ...Harmony.SparseMap.make<Rapier.Vector, Harmony.Entity.Id>(),
-  //   clone: Net.clone,
-  // }
-  // Harmony.SparseMap.forEach(left, (tl, entity) => {
-  //   const tr = Harmony.SparseMap.get(right, entity)
-  //   Harmony.SparseMap.set(displayState, entity, lerp(tl, tr, t))
-  // })
-  // return displayState
+  return { ...lerp(left, right, t), clone: Net.clone }
 }
 
 export function make(): World {
@@ -101,21 +91,13 @@ export function make(): World {
       throw new Error("No entity for snapshot")
     },
     displayState() {
-      const snapshot = {
-        ...Harmony.SparseMap.make<Rapier.Vector3, Harmony.Entity.Id>(),
-        clone: Net.clone,
-      }
       for (let i = 0; i < players.length; i++) {
         const [entities, [body]] = players[i]
         for (let k = 0; k < entities.length; k++) {
-          Harmony.SparseMap.set(
-            snapshot,
-            entities[k],
-            (body[k] as Rapier.RigidBody).translation(),
-          )
+          return { ...(body[k] as Rapier.RigidBody).translation(), clone: Net.clone }
         }
       }
-      return snapshot
+      throw new Error("No entity for display state")
     },
     commandIsValid() {
       return true
