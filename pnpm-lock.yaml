@@ -1,10 +1,12 @@
 lockfileVersion: 5.3
 
 specifiers:
+  '@dimforge/rapier3d-compat': ^0.7.6
   '@javelin/hrtime-loop': ^1.0.0-alpha.4
   '@types/three': ^0.133.1
   '@types/ws': ^8.2.0
   harmony-ecs: ^0.0.9
+  isomorphic-ws: ^4.0.1
   npm-run-all: ^4.1.5
   rapier3d-node: ^0.7.7
   three: ^0.133.1
@@ -14,10 +16,12 @@ specifiers:
   ws: ^8.2.3
 
 dependencies:
+  '@dimforge/rapier3d-compat': 0.7.6
   '@javelin/hrtime-loop': 1.0.0-alpha.4
   '@types/three': 0.133.1
   '@types/ws': 8.2.0
   harmony-ecs: 0.0.9
+  isomorphic-ws: 4.0.1_ws@8.2.3
   rapier3d-node: 0.7.7
   three: 0.133.1
   ws: 8.2.3
@@ -41,6 +45,10 @@ packages:
     dependencies:
       '@cspotcode/source-map-consumer': 0.8.0
     dev: true
+
+  /@dimforge/rapier3d-compat/0.7.6:
+    resolution: {integrity: sha512-A+IZSlkyBXlLKxVi4XTfjvySjZ8Lq7qZ0pE5U+renkQnDOjx+yhRMOhL1awqvLt6SJXId6kx8gaz0O8kxw8LLA==}
+    dev: false
 
   /@javelin/hrtime-loop/1.0.0-alpha.4:
     resolution: {integrity: sha512-u2nWSOFTd8yySCx/VzLuTWlg6FZmR+Mnr8T5o4QpZOKsL9KUaiR1BNf0Y+6Mt5lk1Gecz+Ucw60M6NIERtjedg==}
@@ -514,6 +522,14 @@ packages:
   /isexe/2.0.0:
     resolution: {integrity: sha1-6PvzdNxVb/iUehDcsFctYz8s+hA=}
     dev: true
+
+  /isomorphic-ws/4.0.1_ws@8.2.3:
+    resolution: {integrity: sha512-BhBvN2MBpWTaSHdWRb/bwdZJ1WaehQ2L1KngkCkfLUGF0mAWAT1sQUQacEmQ0jXkFw/czDXPNQSL5u2/Krsz1w==}
+    peerDependencies:
+      ws: '*'
+    dependencies:
+      ws: 8.2.3
+    dev: false
 
   /json-parse-better-errors/1.0.2:
     resolution: {integrity: sha512-mrqyZKfX5EhL7hvqcV6WG1yYjnjeuYDzDhhcAAUrq8Po85NBQBJP+ZDUT75qZQ98IkUoBqdkExkukOU7Ts2wrw==}

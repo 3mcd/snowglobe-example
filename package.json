@@ -8,15 +8,17 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "run-p start:*",
     "start:server": "node --loader ts-node/esm --experimental-specifier-resolution=node server/index.ts",
-    "start:client": "cd ./client && vite"
+    "start:client": "cd ./client && vite --host"
   },
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@dimforge/rapier3d-compat": "^0.7.6",
     "@javelin/hrtime-loop": "^1.0.0-alpha.4",
     "@types/three": "^0.133.1",
     "@types/ws": "^8.2.0",
     "harmony-ecs": "^0.0.9",
+    "isomorphic-ws": "^4.0.1",
     "rapier3d-node": "^0.7.7",
     "snowglobe": "^0.0.1",
     "three": "^0.133.1",

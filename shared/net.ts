@@ -1,6 +1,6 @@
 import * as Harmony from "harmony-ecs"
 import * as Snowglobe from "snowglobe"
-import { WebSocket, WebSocketServer } from "ws"
+import WebSocket from "ws"
 import * as World from "../shared/world"
 
 export type Connection = Snowglobe.Connection<World.Command, World.Snapshot> & {
@@ -18,13 +18,14 @@ function initChannels(
 function encode(messageType: Snowglobe.NetworkMessageType, message: any) {
   switch (messageType) {
     case Snowglobe.NetworkMessageType.ClockSyncMessage: {
-      const { clientId, clientSecondsSinceStartup, serverSecondsSinceStartup } = message
+      const { clientId, clientSendSecondsSinceStartup, serverSecondsSinceStartup } =
+        message
       const data = new ArrayBuffer(21)
       const view = new DataView(data)
       view.setUint8(0, messageType)
       view.setUint32(1, clientId)
-      view.setFloat64(9, clientSecondsSinceStartup)
-      view.setFloat64(17, serverSecondsSinceStartup)
+      view.setFloat64(5, clientSendSecondsSinceStartup)
+      view.setFloat64(13, serverSecondsSinceStartup)
       return data
     }
     case Snowglobe.NetworkMessageType.CommandMessage: {
@@ -33,7 +34,7 @@ function encode(messageType: Snowglobe.NetworkMessageType, message: any) {
       const view = new DataView(data)
       view.setUint8(0, messageType)
       view.setUint32(1, entity)
-      view.setUint8(9, jump)
+      view.setUint8(5, jump)
       return data
     }
     case Snowglobe.NetworkMessageType.SnapshotMessage: {
@@ -68,18 +69,35 @@ function decode(
   const view = new DataView(data)
   let message: any
   switch (messageType) {
-    case Snowglobe.NetworkMessageType.ClockSyncMessage:
+    case Snowglobe.NetworkMessageType.ClockSyncMessage: {
+      const clientId = view.getUint32(offset)
+      offset += 4
+      const clientSendSecondsSinceStartup = view.getFloat64(offset)
+      offset += 8
+      const serverSecondsSinceStartup = view.getFloat64(offset)
+      offset += 8
       message = {
-        clientId: view.getFloat64(offset),
-        clientSecondsSinceStartup: view.getFloat64(offset + 4),
-        serverSecondsSinceStartup: view.getFloat64(offset + 12),
+        clientId,
+        clientSendSecondsSinceStartup,
+        serverSecondsSinceStartup,
       }
       break
+    }
     case Snowglobe.NetworkMessageType.CommandMessage:
-      message = [view.getUint32(offset), view.getUint8(offset + 4)]
+      message = Object.assign([view.getUint32(offset), view.getUint8(offset + 4)], {
+        clone() {
+          return message
+        },
+      })
       break
     case Snowglobe.NetworkMessageType.SnapshotMessage:
-      message = Harmony.SparseMap.make() as World.Snapshot
+      message = {
+        ...Harmony.SparseMap.make(),
+        clone: () => ({
+          ...message,
+          values: message.values.map(([translation, jump]) => [{ ...translation }, jump]),
+        }),
+      } as World.Snapshot
       while (offset < end) {
         const entity = view.getUint32(offset)
         offset += 4
@@ -105,13 +123,14 @@ export function makeConnection(socket: WebSocket, connectionHandle: number): Con
   initChannels(incoming)
   initChannels(outgoing)
   let open = socket.readyState === socket.OPEN
-  socket.on("message", (data: ArrayBuffer) => {
-    const messageType = data[0]
+  socket.onmessage = ({ data }) => {
+    const view = new DataView(data as ArrayBuffer)
+    const messageType = view.getUint8(0)
     const buffer = Harmony.SparseMap.get(incoming, messageType)
-    buffer.push(decode(messageType, data))
-  })
-  socket.on("open", () => (open = true))
-  socket.on("close", () => (open = false))
+    buffer.unshift(decode(messageType, data as ArrayBuffer, 1))
+  }
+  socket.onopen = () => (open = true)
+  socket.onclose = () => (open = false)
 
   return {
     recvClockSync() {
@@ -137,16 +156,21 @@ export function makeConnection(socket: WebSocket, connectionHandle: number): Con
         console.warn(`Failed to queue message: connection ${connectionHandle} not open.`)
         return
       }
-      Harmony.SparseMap.get(outgoing, messageType).push(encode(messageType, message))
+      Harmony.SparseMap.get(outgoing, messageType).unshift(encode(messageType, message))
     },
     flush(messageType) {
       if (!open) {
         console.warn(`Failed to send message: connection ${connectionHandle} not open.`)
         return
       }
-      Harmony.SparseMap.get(outgoing, messageType).forEach(message => {
-        socket.send(message)
-      })
+      const buffer = Harmony.SparseMap.get(outgoing, messageType)
+      let message: ArrayBuffer
+      while ((message = buffer.pop())) {
+        let m = message
+        setTimeout(() => {
+          socket.send(m)
+        }, 200)
+      }
     },
     get open() {
       return open
@@ -154,14 +178,14 @@ export function makeConnection(socket: WebSocket, connectionHandle: number): Con
   }
 }
 
-export function makeNet(
+export function make(
   connections: Map<number, Connection>,
 ): Snowglobe.NetworkResource<World.Command, World.Snapshot> {
   return {
     *connections(): IterableIterator<[number, Connection]> {
       for (const entry of connections.entries()) {
         if (entry[1].open) {
-          return entry
+          yield entry
         }
       }
     },

@@ -6,16 +6,20 @@ import * as Snowglobe from "snowglobe"
 import * as Net from "../../shared/net"
 import * as World from "../../shared/world"
 import * as Harmony from "harmony-ecs"
+import WebSocket from "isomorphic-ws"
+import { init } from "@dimforge/rapier3d-compat"
+
+await init()
 
 const connections = new Map<number, Net.Connection>()
-const ws = new WebSocket("ws://localhost:8000")
-const net = Net.makeNet(connections)
+const socket = new WebSocket(`ws://${window.location.hostname}:8000`)
+const net = Net.make(connections)
 const config = Snowglobe.makeConfig()
 const client = new Snowglobe.Client(World.make, config, World.interpolate)
 
-ws.binaryType = "arraybuffer"
-ws.addEventListener("open", socket => connections.set(0, socket))
-ws.addEventListener("close", socket => connections.delete(0))
+socket.binaryType = "arraybuffer"
+socket.addEventListener("open", () => connections.set(0, Net.makeConnection(socket, 0)))
+socket.addEventListener("close", () => connections.delete(0))
 
 const canvas = document.getElementById("game") as HTMLCanvasElement
 const camera = new Three.PerspectiveCamera(45, 1, 0.1, 2000000)
@@ -34,20 +38,25 @@ function scale() {
 window.addEventListener("resize", scale, false)
 scale()
 
-const world = Harmony.World.make(1_000)
+const { ecs: world } = World.make()
 const Mesh = Schema.make(world, {})
 const Player = [Mesh] as const
+const players = Harmony.Query.make(world, Player)
 
-function makePlayer(world: World.World, scene: Three.Scene) {
+function attachMesh(
+  entity: Harmony.Entity.Id,
+  world: Harmony.World.World,
+  scene: Three.Scene,
+) {
   const geometry = new CapsuleBufferGeometry(1, 1, 2, 10, 10, 10, 10)
   const material = new Three.MeshLambertMaterial({ color: 0xff0000 })
   const mesh = new Three.Mesh(geometry, material)
   scene.add(mesh)
-  return Entity.make(world, Player, [mesh])
+  return Entity.set(world, entity, Player, [mesh])
 }
 
-makePlayer(world, scene)
-makePlayer(world, scene)
+attachMesh(2, world, scene)
+attachMesh(3, world, scene)
 
 scene.add(camera)
 camera.position.x = 20
@@ -57,6 +66,15 @@ camera.position.z = 20
 function render(displayState: World.DisplayState) {
   controls.update()
   renderer.render(scene, camera)
+
+  for (const [entities, [mesh]] of players) {
+    for (let i = 0; i < entities.length; i++) {
+      const update = Harmony.SparseMap.get(displayState, entities[i])
+      if (update) {
+        Object.assign((mesh[i] as Three.Mesh).position, update)
+      }
+    }
+  }
 }
 
 let startSeconds = 0
@@ -68,17 +86,37 @@ function step(now: number) {
   if (startSeconds === undefined) {
     startSeconds = nowSeconds
   }
-  client.update(nowSeconds - prevSeconds, now - startSeconds, net)
-  const displayState = client.displayState()
-  render(displayState)
+  client.update(nowSeconds - (prevSeconds ?? nowSeconds), nowSeconds - startSeconds, net)
+  const displayState = client.stage().ready?.displayState().displayState()
+  if (displayState) {
+    render(displayState)
+  }
   prevSeconds = nowSeconds
-  requestAnimationFrame(step)
+  // requestAnimationFrame(step)
 }
-
-requestAnimationFrame(step)
+setInterval(() => {
+  step(performance.now())
+})
+// requestAnimationFrame(step)
 
 document.addEventListener("keydown", e => {
   if (e.code === "Space") {
-    // ws.send(new ArrayBuffer(0))
+    const command = Object.assign([2, 1], {
+      clone() {
+        return command
+      },
+    })
+    client.stage().ready?.issueCommand(command as World.Command, net)
+  }
+})
+
+document.addEventListener("keyup", e => {
+  if (e.code === "Space") {
+    const command = Object.assign([2, 0], {
+      clone() {
+        return command
+      },
+    })
+    client.stage().ready?.issueCommand(command as World.Command, net)
   }
 })

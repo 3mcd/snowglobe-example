@@ -8,7 +8,7 @@ let nextConnectionHandle = 0
 const connections = new Map<number, Net.Connection>()
 
 const wss = new WebSocketServer({ port: 8000 })
-const net = Net.makeNet(connections)
+const net = Net.make(connections)
 const config = Snowglobe.makeConfig()
 const server = new Snowglobe.Server(World.make(), config, 0)
 
@@ -20,8 +20,12 @@ wss.on("connection", socket => {
   socket.on("close", () => connections.delete(connectionHandle))
 })
 
+let timeSinceStartup = 0
+
 const loop = Loop.createHrtimeLoop(clock => {
-  server.update(clock.dt / 1000, Number(clock.now) / 1000, net)
+  const deltaSeconds = clock.dt / 1000
+  server.update(clock.dt / 1000, timeSinceStartup, net)
+  timeSinceStartup += deltaSeconds
 }, (1 / 60) * 1000)
 
 loop.start()

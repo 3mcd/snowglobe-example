@@ -2,7 +2,9 @@ import * as Harmony from "harmony-ecs"
 import Rapier from "rapier3d-node"
 import * as Snowglobe from "snowglobe"
 
-export type World = Snowglobe.World<Command, Snapshot, DisplayState>
+export type World = Snowglobe.World<Command, Snapshot, DisplayState> & {
+  ecs: Harmony.World.World
+}
 export type Command = Snowglobe.Command & [entity: number, jump: number]
 export type Snapshot = Snowglobe.Snapshot &
   Harmony.SparseMap.SparseMap<
@@ -22,20 +24,27 @@ function lerp(a: Rapier.Vector3, b: Rapier.Vector3, t: number) {
   const out = new Rapier.Vector3(0, 0, 0)
   out.x = ax + t * (b.x - ax)
   out.y = ay + t * (b.y - ay)
-  out.y = az + t * (b.z - az)
+  out.z = az + t * (b.z - az)
   return out
 }
 
 export function interpolate(left: DisplayState, right: DisplayState, t: number) {
-  const displayState = Harmony.SparseMap.make<Rapier.Vector, Harmony.Entity.Id>()
+  const map = Harmony.SparseMap.make<Rapier.Vector, Harmony.Entity.Id>()
   Harmony.SparseMap.forEach(left, (tl, entity) => {
     const tr = Harmony.SparseMap.get(right, entity)
-    Harmony.SparseMap.set(displayState, entity, lerp(tl, tr, t))
+    Harmony.SparseMap.set(map, entity, lerp(tl, tr, t))
   })
+  const displayState = {
+    ...map,
+    clone: () => ({
+      ...displayState,
+      values: displayState.values.map(t => ({ ...t })),
+    }),
+  }
   return displayState
 }
 
-export function make(): Snowglobe.World<Command, Snapshot, DisplayState> {
+export function make(): World {
   const ecs = Harmony.World.make(ENTITY_COUNT)
   const simulation = new Rapier.World(GRAVITY)
   const Body = Harmony.Schema.make(ecs, {})
@@ -63,6 +72,7 @@ export function make(): Snowglobe.World<Command, Snapshot, DisplayState> {
   makeGround()
 
   return {
+    ecs,
     step() {
       for (let i = 0; i < players.length; i++) {
         const [entities, [body, jump]] = players[i]
@@ -70,7 +80,7 @@ export function make(): Snowglobe.World<Command, Snapshot, DisplayState> {
           const b = body[k] as Rapier.RigidBody
           const j = jump[k]
           if (j) {
-            b.applyImpulse(new Rapier.Vector3(0, 20, 0), true)
+            b.applyForce(new Rapier.Vector3(0, 4000, 0), true)
             jump[k] = 0
           }
         }
