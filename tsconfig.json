@@ -1,7 +1,9 @@
 {
   "compilerOptions": {
+    "target": "ES5",
     "module": "esnext",
     "moduleResolution": "node",
-    "esModuleInterop": true
+    "esModuleInterop": true,
+    "downlevelIteration": true
   }
 }

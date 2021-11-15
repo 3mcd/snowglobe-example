@@ -2,6 +2,7 @@ import * as Harmony from "harmony-ecs"
 import Rapier from "rapier3d-node"
 import * as Snowglobe from "snowglobe"
 
+export type World = Snowglobe.World<Command, Snapshot, DisplayState>
 export type Command = Snowglobe.Command & [entity: number, jump: number]
 export type Snapshot = Snowglobe.Snapshot &
   Harmony.SparseMap.SparseMap<

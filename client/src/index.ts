@@ -1,17 +1,25 @@
 import * as Three from "three"
-import { World, Schema, Entity } from "harmony-ecs"
+import { Schema, Entity } from "harmony-ecs"
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls"
 import CapsuleBufferGeometry from "./3d/CapsuleBufferGeometry"
+import * as Snowglobe from "snowglobe"
+import * as Net from "../../shared/net"
+import * as World from "../../shared/world"
+import * as Harmony from "harmony-ecs"
 
+const connections = new Map<number, Net.Connection>()
 const ws = new WebSocket("ws://localhost:8000")
-const MAX_ENTITIES = 2_000
+const net = Net.makeNet(connections)
+const config = Snowglobe.makeConfig()
+const client = new Snowglobe.Client(World.make, config, World.interpolate)
 
-let frameId = 0
-const frames: [ArrayBuffer, ArrayBuffer][] = []
-const messages: ArrayBuffer[] = []
+ws.binaryType = "arraybuffer"
+ws.addEventListener("open", socket => connections.set(0, socket))
+ws.addEventListener("close", socket => connections.delete(0))
+
 const canvas = document.getElementById("game") as HTMLCanvasElement
-const renderer = new Three.WebGLRenderer({ antialias: true, canvas })
 const camera = new Three.PerspectiveCamera(45, 1, 0.1, 2000000)
+const renderer = new Three.WebGLRenderer({ antialias: true, canvas })
 const controls = new OrbitControls(camera, renderer.domElement)
 const scene = new Three.Scene()
 
@@ -26,7 +34,7 @@ function scale() {
 window.addEventListener("resize", scale, false)
 scale()
 
-const world = World.make(MAX_ENTITIES)
+const world = Harmony.World.make(1_000)
 const Mesh = Schema.make(world, {})
 const Player = [Mesh] as const
 
@@ -38,59 +46,39 @@ function makePlayer(world: World.World, scene: Three.Scene) {
   return Entity.make(world, Player, [mesh])
 }
 
-const player = makePlayer(world, scene)
-const archetype = world.entityIndex[player]
-const meshes = archetype.store.find(col => col.schema.id === Mesh)
-const keys = ["x", "y", "z"]
-
 makePlayer(world, scene)
-
-ws.binaryType = "arraybuffer"
-ws.addEventListener("message", message => {
-  messages.push(message.data)
-})
+makePlayer(world, scene)
 
 scene.add(camera)
 camera.position.x = 20
 camera.position.y = 20
 camera.position.z = 20
 
-function render() {
+function render(displayState: World.DisplayState) {
   controls.update()
   renderer.render(scene, camera)
 }
 
-function step() {
-  render()
+let startSeconds = 0
+let prevSeconds: number
+
+function step(now: number) {
+  const nowSeconds = now / 1000
+  // render()
+  if (startSeconds === undefined) {
+    startSeconds = nowSeconds
+  }
+  client.update(nowSeconds - prevSeconds, now - startSeconds, net)
+  const displayState = client.displayState()
+  render(displayState)
+  prevSeconds = nowSeconds
   requestAnimationFrame(step)
 }
 
 requestAnimationFrame(step)
 
-setInterval(() => {
-  for (let i = 0; i < messages.length; i++) {
-    let cursor = 0
-    const message = new Float64Array(messages[i])
-    const frameId = message[cursor++]
-    const count = message[cursor++]
-    // rollback
-    let frame: [ArrayBuffer, ArrayBuffer] = frames[0]
-
-    while (frame[0][0] <= frameId) {
-      frames.unshift()
-    }
-
-    for (let i = 0; i < keys.length; i++) {
-      const key = keys[i]
-      for (let j = 0; j < count; j++) {
-        meshes.data[j].position[key] = message[cursor++]
-      }
-    }
-  }
-}, (1 / 60) * 1000)
-
 document.addEventListener("keydown", e => {
   if (e.code === "Space") {
-    ws.send(new ArrayBuffer(0))
+    // ws.send(new ArrayBuffer(0))
   }
 })
