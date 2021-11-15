@@ -39,8 +39,8 @@ scale()
 
 const { ecs: world } = World.make()
 const Mesh = Schema.make(world, {})
-const Player = [Mesh] as const
-const players = Harmony.Query.make(world, Player)
+const Drawable = [Mesh] as const
+const drawables = Harmony.Query.make(world, Drawable)
 
 function attachMesh(
   entity: Harmony.Entity.Id,
@@ -51,7 +51,7 @@ function attachMesh(
   const material = new Three.MeshLambertMaterial({ color: 0xff0000 })
   const mesh = new Three.Mesh(geometry, material)
   scene.add(mesh)
-  return Entity.set(world, entity, Player, [mesh])
+  return Entity.set(world, entity, Drawable, [mesh])
 }
 
 attachMesh(2, world, scene)
@@ -62,7 +62,7 @@ camera.position.y = 20
 camera.position.z = 20
 
 function render({ x, y, z }: World.DisplayState) {
-  for (const [entities, [mesh]] of players) {
+  for (const [entities, [mesh]] of drawables) {
     for (let i = 0; i < entities.length; i++) {
       ;(mesh[i] as Three.Mesh).position.set(x, y, z)
       break
@@ -88,8 +88,6 @@ function step(now: number) {
   prevSeconds = nowSeconds
   requestAnimationFrame(step)
 }
-
-// setInterval(() => step(performance.now()), (1 / 60) * 1000)
 
 requestAnimationFrame(step)
 

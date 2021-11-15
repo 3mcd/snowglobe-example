@@ -7,7 +7,11 @@ export type World = Snowglobe.World<Command, Snapshot, DisplayState> & {
   ecs: Harmony.World.World
 }
 export type Command = Snowglobe.Command & { entity: number; jump: number }
-export type Snapshot = Snowglobe.Snapshot & { translation: Rapier.Vector3; jump: number }
+export type Snapshot = Snowglobe.Snapshot & {
+  translation: Rapier.Vector3
+  linvel: Rapier.Vector3
+  jump: number
+}
 export type DisplayState = Snowglobe.DisplayState & Rapier.Vector3
 
 const ENTITY_COUNT = 1_000
@@ -16,7 +20,7 @@ const GRAVITY = { x: 0, y: -9.81, z: 0 }
 
 export const config = Snowglobe.makeConfig({
   timestepSeconds: TIMESTEP,
-  tweeningMethod: Snowglobe.TweeningMethod.MostRecentlyPassed,
+  tweeningMethod: Snowglobe.TweeningMethod.Interpolated,
 })
 
 function lerp(a: Rapier.Vector3, b: Rapier.Vector3, t: number) {
@@ -69,7 +73,7 @@ export function make(): World {
           const b = body[k] as Rapier.RigidBody
           const j = jump[k]
           if (j) {
-            b.applyForce(new Rapier.Vector3(0, 4000, 0), true)
+            b.applyForce(new Rapier.Vector3(0, 5000, 0), true)
             jump[k] = 0
           }
         }
@@ -81,8 +85,10 @@ export function make(): World {
       for (let i = 0; i < players.length; i++) {
         const [entities, [body, jump]] = players[i]
         for (let k = 0; k < entities.length; k++) {
+          const b = body[k] as Rapier.RigidBody
           return {
-            translation: (body[k] as Rapier.RigidBody).translation(),
+            translation: b.translation(),
+            linvel: b.linvel(),
             jump: jump[k],
             clone: Net.clone,
           }
@@ -109,7 +115,9 @@ export function make(): World {
       for (let i = 0; i < players.length; i++) {
         const [entities, [body, jump]] = players[i]
         for (let k = 0; k < entities.length; k++) {
-          ;(body[k] as Rapier.RigidBody).setTranslation(snapshot.translation, true)
+          const b = body[k] as Rapier.RigidBody
+          b.setTranslation(snapshot.translation, true)
+          b.setLinvel(snapshot.linvel, true)
           jump[k] = snapshot.jump
         }
       }

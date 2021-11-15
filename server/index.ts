@@ -21,17 +21,10 @@ wss.on("connection", socket => {
 })
 
 let timeSinceStartup = 0
-
 const loop = Loop.createHrtimeLoop(clock => {
   const deltaSeconds = clock.dt / 1000
-  server.update(clock.dt / 1000, timeSinceStartup, net)
+  server.update(deltaSeconds, timeSinceStartup, net)
   timeSinceStartup += deltaSeconds
-
-  // console.log(
-  //   Math.floor(
-  //     world.ecs.rootTable.edgesSet[0].edgesSet[1].store[0].data[0].translation().y,
-  //   ),
-  // )
 }, (1 / 60) * 1000)
 
 loop.start()

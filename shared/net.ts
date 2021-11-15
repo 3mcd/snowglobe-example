@@ -48,7 +48,7 @@ function encode(messageType: Snowglobe.NetworkMessageType, message: any) {
       return data
     }
     case Snowglobe.NetworkMessageType.SnapshotMessage: {
-      const data = new ArrayBuffer(1 + 2 + 8 * 3 + 1)
+      const data = new ArrayBuffer(1 + 2 + 8 * 3 + 8 * 3 + 1)
       const view = new DataView(data)
       let offset = 0
       view.setUint8(offset, messageType)
@@ -56,11 +56,18 @@ function encode(messageType: Snowglobe.NetworkMessageType, message: any) {
       view.setInt16(offset, Snowglobe.getTimestamp(message))
       offset += 2
       const { x, y, z } = message.translation
+      const { x: vx, y: vy, z: vz } = message.linvel
       view.setFloat64(offset, x)
       offset += 8
       view.setFloat64(offset, y)
       offset += 8
       view.setFloat64(offset, z)
+      offset += 8
+      view.setFloat64(offset, vx)
+      offset += 8
+      view.setFloat64(offset, vy)
+      offset += 8
+      view.setFloat64(offset, vz)
       offset += 8
       view.setUint8(offset, message.jump)
       offset += 1
@@ -96,7 +103,7 @@ function decode(
       const timestamp = view.getInt16(offset)
       message = Snowglobe.setTimestamp(
         { entity: view.getUint32(offset + 2), jump: view.getUint8(offset + 6), clone },
-        timestamp as any,
+        timestamp as Snowglobe.Timestamp,
       )
       break
     }
@@ -109,9 +116,18 @@ function decode(
       offset += 8
       const z = view.getFloat64(offset)
       offset += 8
+      const vx = view.getFloat64(offset)
+      offset += 8
+      const vy = view.getFloat64(offset)
+      offset += 8
+      const vz = view.getFloat64(offset)
+      offset += 8
       const jump = view.getUint8(offset)
       offset += 1
-      message = { translation: { x, y, z }, jump, clone }
+      message = Snowglobe.setTimestamp(
+        { translation: { x, y, z }, linvel: { x: vx, y: vy, z: vz }, jump, clone },
+        timestamp as Snowglobe.Timestamp,
+      )
       break
     }
   }
@@ -148,10 +164,11 @@ export function makeConnection(socket: WebSocket, connectionHandle: number): Con
       return command
     },
     recvSnapshot() {
-      return Harmony.SparseMap.get(
+      const snap = Harmony.SparseMap.get(
         incoming,
         Snowglobe.NetworkMessageType.SnapshotMessage,
       ).pop()
+      return snap
     },
     send(messageType, message) {
       if (!open) {
