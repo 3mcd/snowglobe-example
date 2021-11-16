@@ -28,6 +28,9 @@ export type DisplayState = Snowglobe.DisplayState & {
 const ENTITY_COUNT = 1_000
 const TIMESTEP = 1 / 60
 const GRAVITY = { x: 0, y: -9.81, z: 0 }
+const GROUND_SNAP_DISTANCE = 0.5
+const GROUND_SNAP_EASING = 0.5
+const HORIZONTAL_DAMPING = 0.2
 
 export const config = Snowglobe.makeConfig({
   timestepSeconds: TIMESTEP,
@@ -46,7 +49,23 @@ function hasInput(mask: number, inputs: PlayerInput) {
   return (mask & inputs) === inputs
 }
 
-const LINEAR_DAMPING = 0.2
+const DOWN_VECTOR = { x: 0, y: -1, z: 0 }
+const GROUND_CAST_SHAPE = new Rapier.Cuboid(0.5, 0.5, 0.5)
+
+function detectGround(
+  simulation: Rapier.World,
+  translation: Rapier.Vector3,
+  rotation: Rapier.Quaternion,
+) {
+  return simulation.castShape(
+    translation,
+    rotation,
+    DOWN_VECTOR,
+    GROUND_CAST_SHAPE,
+    GROUND_SNAP_DISTANCE,
+    0x000d0004,
+  )
+}
 
 export function make(): World {
   const ecs = Harmony.World.make(ENTITY_COUNT)
@@ -104,20 +123,14 @@ export function make(): World {
           const i = input[k]
           const b = body[k] as Rapier.RigidBody
           const translation = b.translation()
+          const rotation = b.rotation()
           const up = +hasInput(i, PlayerInput.Up)
           const down = +hasInput(i, PlayerInput.Down)
           const left = +hasInput(i, PlayerInput.Left)
           const right = +hasInput(i, PlayerInput.Right)
           const falling = force.y[k] <= 0
-          const hit = simulation.castShape(
-            b.translation(),
-            b.rotation(),
-            { x: 0, y: -1, z: 0 },
-            new Rapier.Cuboid(0.5, 0.5, 0.5),
-            0.5,
-            0x000d0004,
-          )
-          const snap = hit ? hit.toi / 2 : Infinity
+          const hit = detectGround(simulation, translation, rotation)
+          const snap = hit ? hit.toi * GROUND_SNAP_EASING : Infinity
           force.x[k] += (right - left) / 50
           force.z[k] += (down - up) / 50
           if (falling && snap === 0) {
@@ -135,8 +148,8 @@ export function make(): World {
             // gravity
             force.y[k] -= 9.81 / 1000
           }
-          force.x[k] *= 1 - LINEAR_DAMPING
-          force.z[k] *= 1 - LINEAR_DAMPING
+          force.x[k] *= 1 - HORIZONTAL_DAMPING
+          force.z[k] *= 1 - HORIZONTAL_DAMPING
           translation.x += force.x[k]
           translation.y += force.y[k]
           translation.z += force.z[k]
