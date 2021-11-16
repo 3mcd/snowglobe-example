@@ -46,6 +46,8 @@ function hasInput(mask: number, inputs: PlayerInput) {
   return (mask & inputs) === inputs
 }
 
+const LINEAR_DAMPING = 0.2
+
 export function make(): World {
   const ecs = Harmony.World.make(ENTITY_COUNT)
   const simulation = new Rapier.World(GRAVITY)
@@ -99,8 +101,8 @@ export function make(): World {
       for (let i = 0; i < players.length; i++) {
         const [entities, [body, input, force]] = players[i]
         for (let k = 0; k < entities.length; k++) {
-          const b = body[k] as Rapier.RigidBody
           const i = input[k]
+          const b = body[k] as Rapier.RigidBody
           const translation = b.translation()
           const up = +hasInput(i, PlayerInput.Up)
           const down = +hasInput(i, PlayerInput.Down)
@@ -116,10 +118,12 @@ export function make(): World {
             0x000d0004,
           )
           const snap = hit ? hit.toi / 2 : Infinity
+          force.x[k] += (right - left) / 50
+          force.z[k] += (down - up) / 50
           if (falling && snap === 0) {
             // grounded – detect jump
             if (hasInput(i, PlayerInput.Jump)) {
-              force.y[k] += 1
+              force.y[k] += 0.2
               input[k] &= ~PlayerInput.Jump
             } else {
               force.y[k] = 0
@@ -131,10 +135,12 @@ export function make(): World {
             // gravity
             force.y[k] -= 9.81 / 1000
           }
-          translation.x += (right - left) / 10
+          force.x[k] *= 1 - LINEAR_DAMPING
+          force.z[k] *= 1 - LINEAR_DAMPING
+          translation.x += force.x[k]
           translation.y += force.y[k]
-          translation.z += (down - up) / 10
-          b.setTranslation(translation, false)
+          translation.z += force.z[k]
+          b.setNextKinematicTranslation(translation)
         }
       }
       simulation.timestep = TIMESTEP
@@ -174,12 +180,12 @@ export function make(): World {
       return true
     },
     applyCommand({ entity, on, off }: Command) {
-      for (const [entities, [, input]] of players) {
-        for (let i = 0; i < entities.length; i++) {
-          const e = entities[i]
+      for (const [entities, [body, input, force]] of players) {
+        for (let k = 0; k < entities.length; k++) {
+          const e = entities[k]
           if (e === entity) {
-            input[i] |= on
-            input[i] &= ~off
+            input[k] |= on
+            input[k] &= ~off
             break
           }
         }
@@ -190,6 +196,7 @@ export function make(): World {
         const [entities, [body, input, force]] = players[i]
         for (let k = 0; k < entities.length; k++) {
           const b = body[k] as Rapier.RigidBody
+          // hard-snap physics state
           b.setTranslation(snapshot.translation, true)
           b.setRotation(snapshot.rotation, true)
           force.x[k] = snapshot.force.x
