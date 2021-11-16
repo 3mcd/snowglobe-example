@@ -7,14 +7,44 @@ import * as Net from "../../shared/net"
 import * as World from "../../shared/world"
 import * as Harmony from "harmony-ecs"
 import WebSocket from "isomorphic-ws"
-import { init } from "@dimforge/rapier3d-compat"
+import { init, Vector3 } from "@dimforge/rapier3d-compat"
+import { Quaternion } from "three"
 
 await init()
+
+function lerp(a: Vector3, b: Vector3, t: number) {
+  const ax = a.x
+  const ay = a.y
+  const az = a.z
+  const out = new Vector3(0, 0, 0)
+  out.x = ax + t * (b.x - ax)
+  out.y = ay + t * (b.y - ay)
+  out.z = az + t * (b.z - az)
+  return out
+}
+
+const tmpQuatFrom = new Quaternion()
+const tmpQuatTo = new Quaternion()
+
+export function interpolate(
+  left: World.DisplayState,
+  right: World.DisplayState,
+  t: number,
+) {
+  tmpQuatFrom.set(left.rotation.x, left.rotation.y, left.rotation.z, left.rotation.w)
+  tmpQuatTo.set(right.rotation.x, right.rotation.y, right.rotation.z, right.rotation.w)
+  const { x, y, z, w } = tmpQuatTo.slerp(tmpQuatFrom, t)
+  return {
+    translation: lerp(left.translation, right.translation, t),
+    clone: Net.clone,
+    rotation: { x, y, z, w },
+  }
+}
 
 const connections = new Map<number, Net.Connection>()
 const socket = new WebSocket(`ws://${window.location.hostname}:8000`)
 const net = Net.make(connections)
-const client = new Snowglobe.Client(World.make, World.config, World.interpolate)
+const client = new Snowglobe.Client(World.make, World.config, interpolate)
 
 socket.binaryType = "arraybuffer"
 socket.addEventListener("open", () => connections.set(0, Net.makeConnection(socket, 0)))
@@ -54,17 +84,23 @@ function attachMesh(
   return Entity.set(world, entity, Drawable, [mesh])
 }
 
-attachMesh(2, world, scene)
+attachMesh(4, world, scene)
 
 scene.add(camera)
 camera.position.x = 20
 camera.position.y = 20
 camera.position.z = 20
 
-function render({ x, y, z }: World.DisplayState) {
+function render({ translation, rotation }: World.DisplayState) {
   for (const [entities, [mesh]] of drawables) {
     for (let i = 0; i < entities.length; i++) {
-      ;(mesh[i] as Three.Mesh).position.set(x, y, z)
+      ;(mesh[i] as Three.Mesh).position.set(translation.x, translation.y, translation.z)
+      ;(mesh[i] as Three.Mesh).quaternion.set(
+        rotation.x,
+        rotation.y,
+        rotation.z,
+        rotation.w,
+      )
       break
     }
   }
@@ -93,7 +129,46 @@ requestAnimationFrame(step)
 
 document.addEventListener("keydown", e => {
   if (!e.repeat && e.code === "Space") {
-    const command = { entity: 2, jump: 1, clone: Net.clone }
+    const command = { entity: 4, on: World.PlayerInput.Jump, off: 0, clone: Net.clone }
+    client.stage().ready?.issueCommand(command, net)
+  }
+  if (e.code === "KeyW") {
+    const command = { entity: 4, on: World.PlayerInput.Up, off: 0, clone: Net.clone }
+    client.stage().ready?.issueCommand(command, net)
+  }
+  if (e.code === "KeyS") {
+    const command = { entity: 4, on: World.PlayerInput.Down, off: 0, clone: Net.clone }
+    client.stage().ready?.issueCommand(command, net)
+  }
+  if (e.code === "KeyA") {
+    const command = { entity: 4, on: World.PlayerInput.Left, off: 0, clone: Net.clone }
+    client.stage().ready?.issueCommand(command, net)
+  }
+  if (e.code === "KeyD") {
+    const command = { entity: 4, on: World.PlayerInput.Right, off: 0, clone: Net.clone }
+    client.stage().ready?.issueCommand(command, net)
+  }
+})
+
+document.addEventListener("keyup", e => {
+  if (e.code === "Space") {
+    const command = { entity: 4, on: 0, off: World.PlayerInput.Jump, clone: Net.clone }
+    client.stage().ready?.issueCommand(command, net)
+  }
+  if (e.code === "KeyW") {
+    const command = { entity: 4, on: 0, off: World.PlayerInput.Up, clone: Net.clone }
+    client.stage().ready?.issueCommand(command, net)
+  }
+  if (e.code === "KeyS") {
+    const command = { entity: 4, on: 0, off: World.PlayerInput.Down, clone: Net.clone }
+    client.stage().ready?.issueCommand(command, net)
+  }
+  if (e.code === "KeyA") {
+    const command = { entity: 4, on: 0, off: World.PlayerInput.Left, clone: Net.clone }
+    client.stage().ready?.issueCommand(command, net)
+  }
+  if (e.code === "KeyD") {
+    const command = { entity: 4, on: 0, off: World.PlayerInput.Right, clone: Net.clone }
     client.stage().ready?.issueCommand(command, net)
   }
 })
