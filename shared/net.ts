@@ -49,7 +49,7 @@ function encode(messageType: Snowglobe.NetworkMessageType, message: any) {
       return data
     }
     case Snowglobe.NetworkMessageType.SnapshotMessage: {
-      const data = new ArrayBuffer(1 + 2 + 8 * 3 + 8 * 4 + 8 * 3 + 1 + 1)
+      const data = new ArrayBuffer(1 + 2 + 8 * 3 + 8 * 4 + 8 * 3 + 1)
       const view = new DataView(data)
       let offset = 0
       view.setUint8(offset, messageType)
@@ -58,8 +58,6 @@ function encode(messageType: Snowglobe.NetworkMessageType, message: any) {
       offset += 2
       const { x, y, z } = message.translation
       const { x: qx, y: qy, z: qz, w: qw } = message.rotation
-      // const { x: avx, y: avy, z: avz } = message.angvel
-      // const { x: vx, y: vy, z: vz } = message.linvel
       const { x: fx, y: fy, z: fz } = message.force
       // translation
       view.setFloat64(offset, x)
@@ -77,20 +75,6 @@ function encode(messageType: Snowglobe.NetworkMessageType, message: any) {
       offset += 8
       view.setFloat64(offset, qw)
       offset += 8
-      // // angvel
-      // view.setFloat64(offset, avx)
-      // offset += 8
-      // view.setFloat64(offset, avy)
-      // offset += 8
-      // view.setFloat64(offset, avz)
-      // offset += 8
-      // // linvel
-      // view.setFloat64(offset, vx)
-      // offset += 8
-      // view.setFloat64(offset, vy)
-      // offset += 8
-      // view.setFloat64(offset, vz)
-      // offset += 8
       // force
       view.setFloat64(offset, fx)
       offset += 8
@@ -98,9 +82,6 @@ function encode(messageType: Snowglobe.NetworkMessageType, message: any) {
       offset += 8
       view.setFloat64(offset, fz)
       offset += 8
-      // grounded
-      view.setUint8(offset, message.grounded)
-      offset += 1
       // input
       view.setUint8(offset, message.input)
       offset += 1
@@ -161,36 +142,19 @@ function decode(
       offset += 8
       const qw = view.getFloat64(offset)
       offset += 8
-      // const avx = view.getFloat64(offset)
-      // offset += 8
-      // const avy = view.getFloat64(offset)
-      // offset += 8
-      // const avz = view.getFloat64(offset)
-      // offset += 8
-      // const vx = view.getFloat64(offset)
-      // offset += 8
-      // const vy = view.getFloat64(offset)
-      // offset += 8
-      // const vz = view.getFloat64(offset)
-      // offset += 8
       const fx = view.getFloat64(offset)
       offset += 8
       const fy = view.getFloat64(offset)
       offset += 8
       const fz = view.getFloat64(offset)
       offset += 8
-      const grounded = view.getUint8(offset)
-      offset += 1
       const input = view.getUint8(offset)
       offset += 1
       message = Snowglobe.setTimestamp(
         {
           translation: { x, y, z },
           rotation: { x: qx, y: qy, z: qz, w: qw },
-          // angvel: { x: avx, y: avy, z: avz },
-          // linvel: { x: vx, y: vy, z: vz },
           force: { x: fx, y: fy, z: fz },
-          grounded,
           input,
           clone,
         },
@@ -225,18 +189,16 @@ export function makeConnection(socket: WebSocket, connectionHandle: number): Con
       ).pop()
     },
     recvCommand() {
-      const command = Harmony.SparseMap.get(
+      return Harmony.SparseMap.get(
         incoming,
         Snowglobe.NetworkMessageType.CommandMessage,
       ).pop()
-      return command
     },
     recvSnapshot() {
-      const snap = Harmony.SparseMap.get(
+      return Harmony.SparseMap.get(
         incoming,
         Snowglobe.NetworkMessageType.SnapshotMessage,
       ).pop()
-      return snap
     },
     send(messageType, message) {
       if (!open) {

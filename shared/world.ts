@@ -16,11 +16,8 @@ export type Command = Snowglobe.Command & {
 export type Snapshot = Snowglobe.Snapshot & {
   translation: Rapier.Vector3
   rotation: Rapier.Quaternion
-  // angvel: Rapier.Vector3
-  // linvel: Rapier.Vector3
   input: number
   force: Rapier.Vector3
-  grounded: number
 }
 
 export type DisplayState = Snowglobe.DisplayState & {
@@ -55,25 +52,22 @@ export function make(): World {
   const Body = Harmony.Schema.make(ecs, {})
   const Input = Harmony.Schema.makeBinary(ecs, Harmony.Format.uint8)
   const Force = Harmony.Schema.makeBinary(ecs, Model.Vector3)
-  const Grounded = Harmony.Schema.makeBinary(ecs, Harmony.Format.uint8)
-  const Player = [Body, Input, Force, Grounded] as const
+  const Player = [Body, Input, Force] as const
   const players = Harmony.Query.make(ecs, Player)
 
   function makePlayer(x = 0, y = 0, z = 0) {
     const body = simulation.createRigidBody(
       new Rapier.RigidBodyDesc(
-        Rapier.RigidBodyType.KinematicVelocityBased,
+        Rapier.RigidBodyType.KinematicPositionBased,
       ).setTranslation(x, y, z),
     )
     simulation.createCollider(
-      Rapier.ColliderDesc.capsule(1, 1)
+      Rapier.ColliderDesc.cuboid(0.5, 0.5, 0.5)
         .setActiveCollisionTypes(
           Rapier.ActiveCollisionTypes.DEFAULT |
             Rapier.ActiveCollisionTypes.KINEMATIC_STATIC,
         )
-        .setActiveEvents(
-          Rapier.ActiveEvents.CONTACT_EVENTS | Rapier.ActiveEvents.INTERSECTION_EVENTS,
-        ),
+        .setCollisionGroups(0),
       body.handle,
     )
     return Harmony.Entity.make(ecs, Player, [body])
@@ -89,70 +83,74 @@ export function make(): World {
           Rapier.ActiveCollisionTypes.DEFAULT |
             Rapier.ActiveCollisionTypes.KINEMATIC_STATIC,
         )
-        .setActiveEvents(
-          Rapier.ActiveEvents.CONTACT_EVENTS | Rapier.ActiveEvents.INTERSECTION_EVENTS,
-        )
+        .setCollisionGroups(0x000d0004)
         .setSensor(true),
       body.handle,
     )
     return collider.handle
   }
 
+  makeGround()
   makePlayer(0, 20, 0)
-  const groundHandle = makeGround()
 
   return {
     ecs,
     step() {
       for (let i = 0; i < players.length; i++) {
-        const [entities, [body, input, force, grounded]] = players[i]
+        const [entities, [body, input, force]] = players[i]
         for (let k = 0; k < entities.length; k++) {
           const b = body[k] as Rapier.RigidBody
           const i = input[k]
-          const linvel = b.linvel()
+          const translation = b.translation()
           const up = +hasInput(i, PlayerInput.Up)
           const down = +hasInput(i, PlayerInput.Down)
           const left = +hasInput(i, PlayerInput.Left)
           const right = +hasInput(i, PlayerInput.Right)
-          if (grounded[k]) {
+          const falling = force.y[k] <= 0
+          const hit = simulation.castShape(
+            b.translation(),
+            b.rotation(),
+            { x: 0, y: -1, z: 0 },
+            new Rapier.Cuboid(0.5, 0.5, 0.5),
+            0.5,
+            0x000d0004,
+          )
+          const snap = hit ? hit.toi / 2 : Infinity
+          if (falling && snap === 0) {
+            // grounded – detect jump
             if (hasInput(i, PlayerInput.Jump)) {
-              force.y[k] += 500 * TIMESTEP
+              force.y[k] += 1
               input[k] &= ~PlayerInput.Jump
+            } else {
+              force.y[k] = 0
             }
-            force.y[k] = Math.max(force.y[k], 0)
+          } else if (falling && Math.abs(snap) < 1) {
+            // ease towards ground
+            force.y[k] = -snap
           } else {
-            force.y[k] -= 9.81 * TIMESTEP
+            // gravity
+            force.y[k] -= 9.81 / 1000
           }
-          linvel.x += (up - down) * 2
-          linvel.y += force.y[k]
-          linvel.z += (left - right) * 2
-          b.setLinvel(linvel, true)
+          translation.x += (right - left) / 10
+          translation.y += force.y[k]
+          translation.z += (down - up) / 10
+          b.setTranslation(translation, false)
         }
       }
       simulation.timestep = TIMESTEP
       simulation.step()
-      for (let i = 0; i < players.length; i++) {
-        const [entities, [body, , , grounded]] = players[i]
-        for (let k = 0; k < entities.length; k++) {
-          const b = body[k] as Rapier.RigidBody
-          grounded[k] = +simulation.intersectionPair(b.collider(0), groundHandle)
-        }
-      }
     },
     snapshot(): Snapshot {
       for (let i = 0; i < players.length; i++) {
-        const [entities, [body, input, force, grounded]] = players[i]
+        const [entities, [body, input, force]] = players[i]
         for (let k = 0; k < entities.length; k++) {
           const b = body[k] as Rapier.RigidBody
           return {
             translation: b.translation(),
             rotation: b.rotation(),
-            // angvel: b.angvel(),
-            // linvel: b.linvel(),
+            force: { x: force.x[k], y: force.y[k], z: force.z[k] },
             input: input[k],
             clone: Net.clone,
-            force: { x: force.x[k], y: force.y[k], z: force.z[k] },
-            grounded: grounded[k],
           }
         }
       }
@@ -189,18 +187,15 @@ export function make(): World {
     },
     applySnapshot(snapshot: Snapshot) {
       for (let i = 0; i < players.length; i++) {
-        const [entities, [body, input, force, grounded]] = players[i]
+        const [entities, [body, input, force]] = players[i]
         for (let k = 0; k < entities.length; k++) {
           const b = body[k] as Rapier.RigidBody
           b.setTranslation(snapshot.translation, true)
           b.setRotation(snapshot.rotation, true)
-          // b.setAngvel(snapshot.angvel, true)
-          // b.setLinvel(snapshot.linvel, true)
-          input[k] = snapshot.input
           force.x[k] = snapshot.force.x
           force.y[k] = snapshot.force.y
           force.z[k] = snapshot.force.z
-          grounded[k] = snapshot.grounded
+          input[k] = snapshot.input
         }
       }
     },

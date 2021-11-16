@@ -77,17 +77,24 @@ function attachMesh(
   world: Harmony.World.World,
   scene: Three.Scene,
 ) {
-  const geometry = new CapsuleBufferGeometry(1, 1, 2, 10, 10, 10, 10)
+  const geometry = new Three.BoxGeometry(1, 1, 1)
   const material = new Three.MeshLambertMaterial({ color: 0xff0000 })
   const mesh = new Three.Mesh(geometry, material)
   scene.add(mesh)
   return Entity.set(world, entity, Drawable, [mesh])
 }
 
-attachMesh(4, world, scene)
+attachMesh(3, world, scene)
+
+const groundGeometry = new Three.BoxGeometry(200, 1, 200)
+const groundMaterial = new Three.MeshBasicMaterial({
+  color: 0x666666,
+  side: Three.DoubleSide,
+})
+const ground = new Three.Mesh(groundGeometry, groundMaterial)
 
 scene.add(camera)
-camera.position.x = 20
+scene.add(ground)
 camera.position.y = 20
 camera.position.z = 20
 
@@ -129,46 +136,46 @@ requestAnimationFrame(step)
 
 document.addEventListener("keydown", e => {
   if (!e.repeat && e.code === "Space") {
-    const command = { entity: 4, on: World.PlayerInput.Jump, off: 0, clone: Net.clone }
+    const command = { entity: 3, on: World.PlayerInput.Jump, off: 0, clone: Net.clone }
     client.stage().ready?.issueCommand(command, net)
   }
   if (e.code === "KeyW") {
-    const command = { entity: 4, on: World.PlayerInput.Up, off: 0, clone: Net.clone }
+    const command = { entity: 3, on: World.PlayerInput.Up, off: 0, clone: Net.clone }
     client.stage().ready?.issueCommand(command, net)
   }
   if (e.code === "KeyS") {
-    const command = { entity: 4, on: World.PlayerInput.Down, off: 0, clone: Net.clone }
+    const command = { entity: 3, on: World.PlayerInput.Down, off: 0, clone: Net.clone }
     client.stage().ready?.issueCommand(command, net)
   }
   if (e.code === "KeyA") {
-    const command = { entity: 4, on: World.PlayerInput.Left, off: 0, clone: Net.clone }
+    const command = { entity: 3, on: World.PlayerInput.Left, off: 0, clone: Net.clone }
     client.stage().ready?.issueCommand(command, net)
   }
   if (e.code === "KeyD") {
-    const command = { entity: 4, on: World.PlayerInput.Right, off: 0, clone: Net.clone }
+    const command = { entity: 3, on: World.PlayerInput.Right, off: 0, clone: Net.clone }
     client.stage().ready?.issueCommand(command, net)
   }
 })
 
 document.addEventListener("keyup", e => {
   if (e.code === "Space") {
-    const command = { entity: 4, on: 0, off: World.PlayerInput.Jump, clone: Net.clone }
+    const command = { entity: 3, on: 0, off: World.PlayerInput.Jump, clone: Net.clone }
     client.stage().ready?.issueCommand(command, net)
   }
   if (e.code === "KeyW") {
-    const command = { entity: 4, on: 0, off: World.PlayerInput.Up, clone: Net.clone }
+    const command = { entity: 3, on: 0, off: World.PlayerInput.Up, clone: Net.clone }
     client.stage().ready?.issueCommand(command, net)
   }
   if (e.code === "KeyS") {
-    const command = { entity: 4, on: 0, off: World.PlayerInput.Down, clone: Net.clone }
+    const command = { entity: 3, on: 0, off: World.PlayerInput.Down, clone: Net.clone }
     client.stage().ready?.issueCommand(command, net)
   }
   if (e.code === "KeyA") {
-    const command = { entity: 4, on: 0, off: World.PlayerInput.Left, clone: Net.clone }
+    const command = { entity: 3, on: 0, off: World.PlayerInput.Left, clone: Net.clone }
     client.stage().ready?.issueCommand(command, net)
   }
   if (e.code === "KeyD") {
-    const command = { entity: 4, on: 0, off: World.PlayerInput.Right, clone: Net.clone }
+    const command = { entity: 3, on: 0, off: World.PlayerInput.Right, clone: Net.clone }
     client.stage().ready?.issueCommand(command, net)
   }
 })
