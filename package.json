@@ -6,21 +6,24 @@
   "type": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "run-p start:*",
-    "start:server": "node --loader ts-node/esm --experimental-specifier-resolution=node server/index.ts",
-    "start:client": "cd ./client && vite --host"
+    "dev": "run-p dev:*",
+    "dev:server": "node --loader ts-node/esm --experimental-specifier-resolution=node server/index.ts",
+    "dev:client": "vite --host",
+    "start": "run-s build dev:server",
+    "build": "vite build"
   },
   "author": "",
   "license": "ISC",
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.7.6",
+    "@hastearcade/snowglobe": "^0.0.2",
     "@javelin/hrtime-loop": "^1.0.0-alpha.4",
     "@types/three": "^0.133.1",
     "@types/ws": "^8.2.0",
     "harmony-ecs": "^0.0.9",
     "isomorphic-ws": "^4.0.1",
+    "node-static": "^0.7.11",
     "rapier3d-node": "^0.7.7",
-    "@hastearcade/snowglobe": "^0.0.2",
     "three": "^0.133.1",
     "ws": "^8.2.3"
   },

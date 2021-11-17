@@ -45,7 +45,7 @@ export function interpolate(
 }
 
 const connections = new Map<number, Net.Connection>()
-const socket = new WebSocket(`ws://${window.location.hostname}:8000`)
+const socket = new WebSocket(`ws://${window.location.host}`)
 const net = Net.make(connections)
 const client = new Snowglobe.Client(World.make, World.config, interpolate)
 
