@@ -1,6 +1,6 @@
 import * as Harmony from "harmony-ecs"
 import Rapier from "rapier3d-node"
-import * as Snowglobe from "snowglobe"
+import * as Snowglobe from "@hastearcade/snowglobe"
 import * as Net from "./net"
 import * as Model from "./model"
 
@@ -31,6 +31,8 @@ const GRAVITY = { x: 0, y: -9.81, z: 0 }
 const GROUND_SNAP_DISTANCE = 0.5
 const GROUND_SNAP_EASING = 0.5
 const HORIZONTAL_DAMPING = 0.2
+const PLAYER_HEIGHT = 3
+const PLAYER_RADIUS = 1
 
 export const config = Snowglobe.makeConfig({
   timestepSeconds: TIMESTEP,
@@ -45,26 +47,62 @@ export enum PlayerInput {
   Jump = 2 ** 4,
 }
 
+export enum CollisionGroup {
+  Static = 0,
+  Door = 1,
+  Actor = 2,
+  Portal = 3,
+  Visible = 4,
+  RayCast = 5,
+  ShapeCast = 6,
+}
+
+export enum CollisionMask {
+  IsStatic = 1 << (CollisionGroup.Static + 16),
+  IsDoor = 1 << (CollisionGroup.Door + 16),
+  IsActor = 1 << (CollisionGroup.Actor + 16),
+  IsPortal = 1 << (CollisionGroup.Portal + 16),
+  IsVisible = 1 << (CollisionGroup.Visible + 16),
+  TouchStatic = 1 << CollisionGroup.Static,
+  TouchActor = 1 << CollisionGroup.Actor,
+  TouchDoor = 1 << CollisionGroup.Door,
+  TouchPortal = 1 << CollisionGroup.Portal,
+  TouchVisible = 1 << CollisionGroup.Visible,
+
+  TerrainMask = CollisionMask.IsStatic |
+    CollisionMask.IsVisible |
+    CollisionMask.TouchActor,
+  ActorMask = CollisionMask.IsActor | CollisionMask.TouchStatic | CollisionMask.TouchDoor,
+  PickMask = CollisionMask.IsActor | CollisionMask.TouchVisible,
+  PortalMask = CollisionMask.IsPortal | CollisionMask.TouchActor,
+}
+
 function hasInput(mask: number, inputs: PlayerInput) {
   return (mask & inputs) === inputs
 }
 
-const DOWN_VECTOR = { x: 0, y: -1, z: 0 }
-const GROUND_CAST_SHAPE = new Rapier.Cuboid(0.5, 0.5, 0.5)
+const GROUND_CAST_SHAPE = new Rapier.Capsule(PLAYER_HEIGHT / 2, PLAYER_RADIUS)
+const WALL_CAST_SHAPE = new Rapier.Capsule(PLAYER_HEIGHT / 3, PLAYER_RADIUS)
 
-function detectGround(
+function detectKinematicCollision(
   simulation: Rapier.World,
-  translation: Rapier.Vector3,
-  rotation: Rapier.Quaternion,
+  body: Rapier.RigidBody,
+  forceVector: Rapier.Vector3,
+  shape = GROUND_CAST_SHAPE,
+  distance = PLAYER_HEIGHT / 2,
 ) {
-  return simulation.castShape(
+  const translation = body.translation()
+  const rotation = body.rotation()
+  const hit = simulation.castShape(
     translation,
     rotation,
-    DOWN_VECTOR,
-    GROUND_CAST_SHAPE,
-    GROUND_SNAP_DISTANCE,
-    0x000d0004,
+    forceVector,
+    shape,
+    distance,
+    CollisionMask.ActorMask,
   )
+
+  return hit
 }
 
 export function make(): World {
@@ -82,13 +120,14 @@ export function make(): World {
         Rapier.RigidBodyType.KinematicPositionBased,
       ).setTranslation(x, y, z),
     )
+
     simulation.createCollider(
-      Rapier.ColliderDesc.cuboid(0.5, 0.5, 0.5)
+      Rapier.ColliderDesc.capsule(PLAYER_HEIGHT / 2, PLAYER_RADIUS)
         .setActiveCollisionTypes(
           Rapier.ActiveCollisionTypes.DEFAULT |
             Rapier.ActiveCollisionTypes.KINEMATIC_STATIC,
         )
-        .setCollisionGroups(0),
+        .setCollisionGroups(CollisionMask.ActorMask),
       body.handle,
     )
     return Harmony.Entity.make(ecs, Player, [body])
@@ -104,7 +143,24 @@ export function make(): World {
           Rapier.ActiveCollisionTypes.DEFAULT |
             Rapier.ActiveCollisionTypes.KINEMATIC_STATIC,
         )
-        .setCollisionGroups(0x000d0004)
+        .setCollisionGroups(CollisionMask.TerrainMask)
+        .setSensor(true),
+      body.handle,
+    )
+    return collider.handle
+  }
+
+  function makeObstacle(x: number, z: number, hx: number, hz: number) {
+    const body = simulation.createRigidBody(
+      new Rapier.RigidBodyDesc(Rapier.RigidBodyType.Static).setTranslation(x, 1, z),
+    )
+    const collider = simulation.createCollider(
+      Rapier.ColliderDesc.cuboid(10, 1, 10)
+        .setActiveCollisionTypes(
+          Rapier.ActiveCollisionTypes.DEFAULT |
+            Rapier.ActiveCollisionTypes.KINEMATIC_STATIC,
+        )
+        .setCollisionGroups(CollisionMask.TerrainMask)
         .setSensor(true),
       body.handle,
     )
@@ -113,6 +169,8 @@ export function make(): World {
 
   makeGround()
   makePlayer(0, 20, 0)
+  makeObstacle(10, 10, 10, 10)
+  makeObstacle(25, 25, 5, 5)
 
   return {
     ecs,
@@ -122,38 +180,52 @@ export function make(): World {
         for (let k = 0; k < entities.length; k++) {
           const i = input[k]
           const b = body[k] as Rapier.RigidBody
-          const translation = b.translation()
-          const rotation = b.rotation()
+          const t = b.translation()
           const up = +hasInput(i, PlayerInput.Up)
           const down = +hasInput(i, PlayerInput.Down)
           const left = +hasInput(i, PlayerInput.Left)
           const right = +hasInput(i, PlayerInput.Right)
-          const falling = force.y[k] <= 0
-          const hit = detectGround(simulation, translation, rotation)
-          const snap = hit ? hit.toi * GROUND_SNAP_EASING : Infinity
-          force.x[k] += (right - left) / 50
-          force.z[k] += (down - up) / 50
-          if (falling && snap === 0) {
-            // grounded – detect jump
-            if (hasInput(i, PlayerInput.Jump)) {
-              force.y[k] += 0.2
-              input[k] &= ~PlayerInput.Jump
-            } else {
-              force.y[k] = 0
-            }
-          } else if (falling && Math.abs(snap) < 1) {
-            // ease towards ground
-            force.y[k] = -snap
-          } else {
-            // gravity
-            force.y[k] -= 9.81 / 1000
+
+          let targetX = (force.x[k] + (right - left) * 0.05) * (1 - HORIZONTAL_DAMPING)
+          let targetZ = (force.z[k] + (down - up) * 0.05) * (1 - HORIZONTAL_DAMPING)
+          let targetY = force.y[k] - 9.81 * 0.002
+
+          const v = detectKinematicCollision(
+            simulation,
+            b,
+            new Rapier.Vector3(0, targetY, 0),
+          )
+          const h = detectKinematicCollision(
+            simulation,
+            b,
+            new Rapier.Vector3(targetX, 0, targetZ),
+            WALL_CAST_SHAPE,
+            PLAYER_RADIUS * 3,
+          )
+
+          if (v && Math.abs(v.normal1.y) > 0) {
+            targetY = 0
           }
-          force.x[k] *= 1 - HORIZONTAL_DAMPING
-          force.z[k] *= 1 - HORIZONTAL_DAMPING
-          translation.x += force.x[k]
-          translation.y += force.y[k]
-          translation.z += force.z[k]
-          b.setNextKinematicTranslation(translation)
+
+          if (h && Math.abs(h.normal1.x) > 0) {
+            targetX = 0
+          }
+
+          if (h && Math.abs(h.normal1.z) > 0) {
+            targetZ = 0
+          }
+
+          if (targetY === 0 && hasInput(i, PlayerInput.Jump)) {
+            targetY = 0.3
+          }
+
+          t.x += force.x[k] = targetX
+          t.y += force.y[k] = targetY
+          t.z += force.z[k] = targetZ
+
+          input[k] &= ~PlayerInput.Jump
+
+          b.setNextKinematicTranslation(t)
         }
       }
       simulation.timestep = TIMESTEP
@@ -193,7 +265,7 @@ export function make(): World {
       return true
     },
     applyCommand({ entity, on, off }: Command) {
-      for (const [entities, [body, input, force]] of players) {
+      for (const [entities, [, input]] of players) {
         for (let k = 0; k < entities.length; k++) {
           const e = entities[k]
           if (e === entity) {

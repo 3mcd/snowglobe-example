@@ -20,7 +20,7 @@
     "harmony-ecs": "^0.0.9",
     "isomorphic-ws": "^4.0.1",
     "rapier3d-node": "^0.7.7",
-    "snowglobe": "^0.0.1",
+    "@hastearcade/snowglobe": "^0.0.2",
     "three": "^0.133.1",
     "ws": "^8.2.3"
   },

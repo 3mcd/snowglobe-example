@@ -1,5 +1,5 @@
 import * as Loop from "@javelin/hrtime-loop"
-import * as Snowglobe from "snowglobe"
+import * as Snowglobe from "@hastearcade/snowglobe"
 import { WebSocketServer } from "ws"
 import * as Net from "../shared/net"
 import * as World from "../shared/world"

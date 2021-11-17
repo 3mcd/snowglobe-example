@@ -1,5 +1,5 @@
 import * as Harmony from "harmony-ecs"
-import * as Snowglobe from "snowglobe"
+import * as Snowglobe from "@hastearcade/snowglobe"
 import WebSocket from "ws"
 import * as World from "../shared/world"
 
