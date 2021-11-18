@@ -8,4 +8,13 @@ export default {
       "rapier3d-node": "@dimforge/rapier3d-compat",
     },
   },
+  server: {
+    port: 3000,
+    https: true,
+    proxy: {
+      "/ws": {
+        target: "wss://localhost:8000",
+      },
+    },
+  },
 }

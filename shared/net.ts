@@ -1,7 +1,13 @@
-import * as Harmony from "harmony-ecs"
 import * as Snowglobe from "@hastearcade/snowglobe"
-import WebSocket from "ws"
-import * as World from "../shared/world"
+import * as Harmony from "harmony-ecs"
+import * as Ws from "ws"
+import * as World from "./simulation"
+
+export enum MessageType {
+  Snowglobe,
+  Spawn,
+  Destroy,
+}
 
 export function clone<$Object extends object>(this: $Object) {
   const timestamp = Snowglobe.getTimestamp(this as any)
@@ -9,11 +15,20 @@ export function clone<$Object extends object>(this: $Object) {
   if (timestamp !== undefined) {
     Snowglobe.setTimestamp(cloned, timestamp)
   }
-  return cloned
 }
 
-export type Connection = Snowglobe.Connection<World.Command, World.Snapshot> & {
+// @ts-ignore
+ArrayBuffer.prototype.clone = function copy() {
+  const out = new ArrayBuffer(this.byteLength)
+  return new Uint8Array(out).set(new Uint8Array(this))
+}
+
+export type Connection = Snowglobe.Connection<
+  World.SimulationCommand,
+  World.SimulationSnapshot
+> & {
   open: boolean
+  socket: Ws.WebSocket
 }
 
 function initChannels(
@@ -166,7 +181,10 @@ function decode(
   return message
 }
 
-export function makeConnection(socket: WebSocket, connectionHandle: number): Connection {
+export function makeConnection(
+  socket: Ws.WebSocket,
+  connectionHandle: number,
+): Connection {
   const incoming = Harmony.SparseMap.make<any[], Snowglobe.NetworkMessageType>()
   const outgoing = Harmony.SparseMap.make<ArrayBuffer[], Snowglobe.NetworkMessageType>()
   initChannels(incoming)
@@ -182,6 +200,7 @@ export function makeConnection(socket: WebSocket, connectionHandle: number): Con
   socket.onclose = () => (open = false)
 
   return {
+    socket,
     recvClockSync() {
       return Harmony.SparseMap.get(
         incoming,
@@ -226,7 +245,7 @@ export function makeConnection(socket: WebSocket, connectionHandle: number): Con
 
 export function make(
   connections: Map<number, Connection>,
-): Snowglobe.NetworkResource<World.Command, World.Snapshot> {
+): Snowglobe.NetworkResource<World.SimulationCommand, World.SimulationSnapshot> {
   return {
     *connections(): IterableIterator<[number, Connection]> {
       for (const entry of connections.entries()) {

@@ -10,6 +10,7 @@ RUN npm install -g pnpm
 ADD package.json package.json
 ADD pnpm-lock.yaml pnpm-lock.yaml
 ADD tsconfig.json tsconfig.json
+ADD vite.config.ts vite.config.ts
 
 # Add source code
 ADD client ./client
@@ -18,6 +19,7 @@ ADD server ./server
 
 # Install dev and project dependencies
 RUN pnpm i
+RUN pnpm build
 
 # Start
 ENTRYPOINT ["pnpm", "start"]

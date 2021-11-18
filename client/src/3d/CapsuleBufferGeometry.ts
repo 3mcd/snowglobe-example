@@ -10,7 +10,7 @@ import { BufferGeometry } from "three"
  * Modified for typescript (partially)
  * @author Kenneth Pirman <github@kenny.wtf>
  */
-export default class CapsuleBufferGeometry extends BufferGeometry {
+export class CapsuleBufferGeometry extends BufferGeometry {
   constructor(
     public radiusTop: number = 1,
     public radiusBottom: number = 1,
