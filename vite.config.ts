@@ -8,4 +8,7 @@ export default {
       "rapier3d-node": "@dimforge/rapier3d-compat",
     },
   },
+  server: {
+    port: 3000,
+  },
 }

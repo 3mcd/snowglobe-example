@@ -22,6 +22,7 @@ const world = World.make()
 const server = new Snowglobe.Server(world, World.config, 0)
 
 wss.on("connection", socket => {
+  console.log("socket")
   const connectionHandle = nextConnectionHandle++
   const connection = Net.makeConnection(socket, connectionHandle)
   connections.set(connectionHandle, connection)
